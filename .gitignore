@@ -28,3 +28,6 @@ node_modules/
 
 # Landing-page image originals — huge, kept local; only the processed slots ship
 public/images/all/
+
+# Office lock files
+~$*

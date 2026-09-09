@@ -397,7 +397,7 @@ function confirmBulkGenerateInvoices() {
   returning.forEach(s => {
     const fs = feeStructures.find(f => f.classId === s.classId && f.term === currentTerm);
     if (!fs) { skipped++; return; }
-    const extraLines = (fs.extraItems || []).filter(i => i.name && i.amount > 0).map(i => ({ name: i.name, amount: i.amount }));
+    const extraLines = (fs.extraItems || []).filter(i => i.name && i.amount > 0).map(i => ({ name: i.name, amount: i.amount, head: 'extra:' + _dpNorm(i.name) }));
     const total = fs.tuition + fs.books + fs.uniform + fs.pta + extraLines.reduce((s, l) => s + l.amount, 0);
     const creditRec = DB.query('studentCredits', c => c.studentId === s.id)[0];
     const creditAvail = creditRec ? creditRec.balance : 0;
@@ -409,10 +409,10 @@ function confirmBulkGenerateInvoices() {
     DB.insert('invoices', {
       id: invId, schoolId, studentId: s.id, term: currentTerm,
       lineItems: [
-        { name: 'Tuition Fee', amount: fs.tuition },
-        { name: 'Books & Materials', amount: fs.books },
-        { name: 'Uniform', amount: fs.uniform },
-        { name: 'PTA Levy', amount: fs.pta },
+        { name: 'Tuition Fee', amount: fs.tuition, head: 'tuition' },
+        { name: 'Books & Materials', amount: fs.books, head: 'books' },
+        { name: 'Uniform', amount: fs.uniform, head: 'uniform' },
+        { name: 'PTA Levy', amount: fs.pta, head: 'pta' },
         ...extraLines
       ],
       total, paid: initPaid, balance: initBalance, status: initStatus, dueDate: fs.dueDate, createdAt: now()
@@ -468,6 +468,7 @@ function view_fin_fees() {
         : `
           <button class="btn btn-ghost" onclick="exportFeeStructureCSV()">${icon('download','w-4 h-4')} CSV</button>
           <button class="btn btn-ghost" onclick="exportFeeStructurePDF()">${icon('download','w-4 h-4')} PDF</button>
+          <button class="btn btn-secondary" onclick="discountPoliciesModal()">${icon('settings','w-4 h-4')} Discount Policies</button>
           <button class="btn btn-primary" onclick="addFeeStructureModal()">${icon('plus','w-4 h-4')} New Structure</button>
         `
     })}
@@ -620,7 +621,7 @@ function viewActivityEnrollments(actId) {
               <div class="font-semibold text-sm">${s.name}</div>
               <div class="text-xs text-slate-500">${cls ? cls.name : '—'} · Enrolled ${fdate(sa.enrolledAt, { short: true })}</div>
             </div>
-            <button class="btn btn-ghost !p-1.5 text-slate-500 hover:text-slate-700" aria-label="View student" title="View student" onclick="document.getElementById('modalBackdrop')?.click(); viewStudent('${s.id}')">${icon('arrow_left','w-4 h-4 rotate-180')}</button>
+            <button class="btn btn-ghost !p-1.5 text-slate-500 hover:text-slate-700" aria-label="View student" title="View student" onclick="openStudentProfile('${s.id}', 'finance')">${icon('arrow_left','w-4 h-4 rotate-180')}</button>
           </div>`;
         }).join('')}
         ${students.length === 0 ? `<p class="text-sm text-slate-500 text-center py-4">No students enrolled yet.</p>` : ''}
@@ -792,6 +793,7 @@ function feeStructureModal(editingId) {
         <div class="bg-brand-50 rounded-xl p-3 text-xs text-brand-900">
           ${icon('info','w-4 h-4 inline mr-1')} Extracurricular fees (swimming, ballet, music, etc.) are <strong>per student</strong> — set them under the <strong>Activities tab</strong> and assign to each student from their profile.
         </div>
+        ${typeof conFeePolicyBlock === 'function' ? conFeePolicyBlock(existing) : ''}
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="input-label" for="fs_due">Fee Due Date</label>
@@ -803,6 +805,7 @@ function feeStructureModal(editingId) {
             <p class="text-xs text-slate-500 mt-1">Prompt payment discounts expire after this date</p>
           </div>
         </div>
+        <div id="fs_policyTotals" class="bg-brand-50 rounded-xl px-4 py-3 text-xs text-brand-900"></div>
         <div class="bg-brand-50 rounded-xl p-3 flex items-center justify-between">
           <span class="font-semibold text-brand-800">Total per student</span>
           <span class="text-xl font-extrabold text-brand-700" id="fs_total">${money((existing ? existing.tuition + existing.books + existing.uniform + existing.pta : 250000))}</span>
@@ -843,6 +846,7 @@ function feeStructureModal(editingId) {
     footer: `<button class="btn btn-secondary" onclick="document.getElementById('modalBackdrop')?.click()">Cancel</button>
              <button class="btn btn-primary" onclick="saveFeeStructure(${isEdit ? "'" + editingId + "'" : 'null'})">${icon('check','w-4 h-4')} ${isEdit ? 'Save Changes' : 'Create Structure'}</button>`
   });
+  if (typeof conFeePolicyTotals === 'function') conFeePolicyTotals();
 }
 
 function toggleInstallmentOptions() {
@@ -856,6 +860,8 @@ function updateFeeTotal() {
   const extra = Array.from(document.querySelectorAll('[id^="fs_ei_amt_"]')).reduce((s, el) => s + (parseInt(el.value) || 0), 0);
   const el = document.getElementById('fs_total');
   if (el) el.textContent = money(base + extra);
+  // Keep the "max potential discount" strip honest as the charge heads change.
+  if (typeof conFeePolicyTotals === 'function') conFeePolicyTotals();
 }
 
 function addFeeExtraItem() {
@@ -887,6 +893,7 @@ function saveFeeStructure(editingId) {
     }).filter(i => i.name),
     dueDate: document.getElementById('fs_due').value,
     discountDeadline: (document.getElementById('fs_discountDeadline') || {}).value || null,
+    allowedPolicies: Array.from(document.querySelectorAll('.fs-policy:checked')).map(cb => cb.value),
     installmentEnabled,
     maxInstalments: installmentEnabled ? parseInt((document.getElementById('fs_maxInstalments') || {}).value) || 2 : null,
     minFirstPct: installmentEnabled ? parseInt((document.getElementById('fs_minFirstPct') || {}).value) || 50 : null

@@ -999,7 +999,7 @@ function viewInvoice(invoiceId) {
     `,
     footer: `
       <button class="btn btn-secondary no-print" onclick="window.print()">${icon('download','w-4 h-4')} Print</button>
-      ${isFinance ? `<button class="btn btn-secondary no-print" onclick="applyDiscountModal('${invoiceId}')">${icon('plus','w-4 h-4')} Discount</button>` : ''}
+      ${isFinance ? `<button class="btn btn-secondary no-print" onclick="editBillModal('${invoiceId}')">${icon('plus','w-4 h-4')} Discount</button>` : ''}
       ${(isFinance || AUTH.current.role === 'parent') && inv.balance > 0 && installmentsAllowed ? `<button class="btn btn-secondary no-print" onclick="installmentPlanModal('${invoiceId}')">${icon('calendar','w-4 h-4')} Installment Plan</button>` : ''}
       ${inv.balance > 0 ? `<button class="btn btn-primary no-print" onclick="document.getElementById('modalBackdrop')?.click(); payInvoiceModal('${invoiceId}')">Pay Now</button>` : ''}
     `

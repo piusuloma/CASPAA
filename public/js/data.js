@@ -12,11 +12,21 @@ const SESSION_KEY = 'caspaa_session_v1';
    the key is absent. Bump this when seedDatabase() gains something an existing
    database should also get, and add the matching step in DB._migrate(). Data the
    user entered is never touched: migrations only ADD what is missing. */
-const SEED_VERSION = 6;
+const SEED_VERSION = 7;
 
 /* ---------- Utility ---------- */
 const uid = (prefix = 'id') => `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 const today = () => new Date().toISOString().slice(0, 10);
+
+/* A plausible arrival stamp for a seeded attendance record, relative to the
+   default 08:00 homeroom / 08:30 cutoff: present arrives before the bell, late
+   inside the grace window, and an absence is stamped at the cutoff by the sweep. */
+const attendanceStamp = (status) => {
+  const hhmm = (h, m) => String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+  if (status === 'present') return { markedAt: hhmm(7, 30 + Math.floor(Math.random() * 30)), auto: false };
+  if (status === 'late') return { markedAt: hhmm(8, 1 + Math.floor(Math.random() * 29)), auto: false };
+  return { markedAt: '08:30', auto: true };
+};
 const now = () => new Date().toISOString();
 const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
 const daysAhead = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
@@ -142,7 +152,7 @@ function seedDatabase() {
     const stuActivities = studentActivities.filter(sa => sa.studentId === s.id && sa.term === fs.term);
     const activityLineItems = stuActivities.map(sa => {
       const act = activities.find(a => a.id === sa.activityId);
-      return act ? { name: act.icon + ' ' + act.name, amount: act.price } : null;
+      return act ? { name: act.icon + ' ' + act.name, amount: act.price, head: 'activity' } : null;
     }).filter(Boolean);
     const activityTotal = activityLineItems.reduce((sum, l) => sum + l.amount, 0);
     const total = fs.tuition + fs.books + fs.uniform + fs.pta + activityTotal;
@@ -155,10 +165,10 @@ function seedDatabase() {
       studentId: s.id,
       term: fs.term,
       lineItems: [
-        { name: 'Tuition Fee', amount: fs.tuition },
-        { name: 'Books & Materials', amount: fs.books },
-        { name: 'Uniform', amount: fs.uniform },
-        { name: 'PTA Levy', amount: fs.pta },
+        { name: 'Tuition Fee', amount: fs.tuition, head: 'tuition' },
+        { name: 'Books & Materials', amount: fs.books, head: 'books' },
+        { name: 'Uniform', amount: fs.uniform, head: 'uniform' },
+        { name: 'PTA Levy', amount: fs.pta, head: 'pta' },
         ...activityLineItems
       ],
       total,
@@ -221,7 +231,11 @@ function seedDatabase() {
       let status = 'present';
       if (r > 0.94) status = 'absent';
       else if (r > 0.88) status = 'late';
-      attendance.push({ id: uid('att'), schoolId, studentId: s.id, classId: s.classId, date, status, recordedBy: classes.find(c => c.id === s.classId).teacherId });
+      // Every record carries the arrival time it was stamped with. Without it the
+      // "Marked at" column, the late-arrival flag and the whole audit trail read
+      // as blank for every historical day.
+      const stamp = attendanceStamp(status);
+      attendance.push({ id: uid('att'), schoolId, studentId: s.id, classId: s.classId, date, status, recordedBy: classes.find(c => c.id === s.classId).teacherId, markedAt: stamp.markedAt, auto: stamp.auto });
     });
   }
 
@@ -1473,6 +1487,23 @@ function seedMigration6(d) {
   return true;
 }
 
+// v7 — arrival timestamps on attendance. Records seeded before this have no
+// markedAt, so every "Marked at" cell, the late-arrival flag and the CSV export
+// rendered blank for historical days. Backfill them in place; anything already
+// stamped is left exactly as it is.
+function seedMigration7(d) {
+  if (!Array.isArray(d.attendance)) return false;
+  let changed = false;
+  d.attendance.forEach(a => {
+    if (!a || a.markedAt) return;
+    const stamp = attendanceStamp(a.status);
+    a.markedAt = stamp.markedAt;
+    if (a.auto === undefined) a.auto = stamp.auto;
+    changed = true;
+  });
+  return changed;
+}
+
 /* ---------- DB Interface ---------- */
 const DB = {
   _data: null,
@@ -1501,6 +1532,7 @@ const DB = {
     let changed = false;
     try {
       if (from < 6) changed = seedMigration6(d) || changed;
+      if (from < 7) changed = seedMigration7(d) || changed;
     } catch (e) {
       console.error('Seed migration failed; leaving the stored database untouched.', e);
       return false;

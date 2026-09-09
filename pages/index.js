@@ -29,6 +29,10 @@ const APP_SCRIPTS = [
   '/js/modules/entitlements.js',
   '/js/modules/billing.js',
   '/js/modules/group.js',
+  '/js/modules/discounts.js',
+  '/js/modules/concessions.js',
+  '/js/modules/attendance.js',
+  '/js/modules/staffprofile.js',
   '/js/app.js',
 ]
 

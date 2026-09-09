@@ -92,6 +92,14 @@ body { min-height: 100vh; font-size: 1rem; line-height: 1.5; -webkit-font-smooth
 .btn-warn:hover { background: #b45309; }
 .btn-gold { background: var(--gold-500); color: var(--navy-800); font-weight: 700; }
 .btn-gold:hover { background: var(--gold-600); color: var(--navy-900); }
+/* A disabled action has to LOOK unavailable — several dialogs gate Save on
+   there being something to save, and without this it looked clickable. */
+.btn:disabled, .btn[disabled] { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
+
+/* Tailwind's preflight puts [hidden]{display:none} in the BASE layer, so any
+   display utility on the same element (inline-flex, grid, block...) wins and
+   el.hidden = true silently does nothing. Make the attribute authoritative. */
+[hidden] { display: none !important; }
 
 /* Inputs */
 .input { width: 100%; padding: var(--s-2) 12px; border: 1.5px solid var(--line); border-radius: var(--r-sm); background: #fff; font-size: 0.9rem; font-family: inherit; transition: border-color 0.15s, box-shadow 0.15s; }

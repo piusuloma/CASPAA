@@ -3576,7 +3576,7 @@ function view_adm_students() {
                 const parent = DB.find('parents', s.parentId);
                 const inv = COMPUTE.studentInvoice(s.id);
                 return `
-                  <tr class="cursor-pointer hover:bg-slate-50" onclick="viewStudent('${s.id}')">
+                  <tr class="cursor-pointer hover:bg-slate-50" onclick="openStudentProfile('${s.id}')">
                     <td>
                       <div class="flex items-center gap-3">
                         ${avatar(s, 'sm')}
@@ -4026,7 +4026,8 @@ function viewStudent(id, activeTab) {
       <button class="btn btn-secondary" onclick="printStudentID('${s.id}')">${icon('download','w-4 h-4')} Print ID</button>
       <button class="btn btn-secondary" onclick="document.getElementById('modalBackdrop')?.click(); setTimeout(()=>studentLifecycleModal('${s.id}'),50)">${icon('settings','w-4 h-4')} Actions</button>
       <button class="btn btn-secondary" onclick="document.getElementById('modalBackdrop')?.click(); setTimeout(()=>editStudent('${s.id}'),50)">${icon('edit','w-4 h-4')} Edit</button>
-      <button class="btn btn-primary" onclick="document.getElementById('modalBackdrop')?.click(); viewAsParent('${s.parentId}')">View as Parent</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('modalBackdrop')?.click(); viewAsParent('${s.parentId}')">View as Parent</button>
+      <button class="btn btn-primary" onclick="openStudentProfile('${s.id}')">${icon('user','w-4 h-4')} Full Profile</button>
     `
   });
 }
@@ -4675,7 +4676,7 @@ function saveStudent(editingId) {
   // Auto-create first invoice from the class's fee structure
   let invoiceCreated = null;
   if (fs) {
-    const actLines = selectedActIds.map(aid => { const a = DB.find('activities', aid); return a ? { name: a.icon + ' ' + a.name, amount: a.price } : null; }).filter(Boolean);
+    const actLines = selectedActIds.map(aid => { const a = DB.find('activities', aid); return a ? { name: a.icon + ' ' + a.name, amount: a.price, head: 'activity' } : null; }).filter(Boolean);
     const total = fs.tuition + fs.books + fs.uniform + fs.pta + actLines.reduce((s, l) => s + l.amount, 0);
     invoiceCreated = {
       id: uid('inv'),
@@ -4683,10 +4684,10 @@ function saveStudent(editingId) {
       studentId: newStudent.id,
       term: fs.term,
       lineItems: [
-        { name: 'Tuition Fee', amount: fs.tuition },
-        { name: 'Books & Materials', amount: fs.books },
-        { name: 'Uniform', amount: fs.uniform },
-        { name: 'PTA Levy', amount: fs.pta },
+        { name: 'Tuition Fee', amount: fs.tuition, head: 'tuition' },
+        { name: 'Books & Materials', amount: fs.books, head: 'books' },
+        { name: 'Uniform', amount: fs.uniform, head: 'uniform' },
+        { name: 'PTA Levy', amount: fs.pta, head: 'pta' },
         ...actLines
       ],
       total, paid: 0, balance: total,
@@ -4882,6 +4883,16 @@ function studentLifecycleModal(studentId) {
               <div class="flex-1">
                 <div class="font-bold text-brand-900">Graduate to Alumni</div>
                 <div class="text-xs text-brand-700">Mark as graduated, keep records accessible</div>
+              </div>
+            </div>
+          </button>
+
+          <button class="w-full p-3 ${s.status === 'active' ? 'bg-slate-50 hover:bg-slate-100' : 'bg-emerald-50 hover:bg-emerald-100'} rounded-xl text-left transition" onclick="toggleStudentAccount('${studentId}')">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl ${s.status === 'active' ? 'bg-slate-200 text-slate-700' : 'bg-emerald-200 text-emerald-700'} flex items-center justify-center">${icon(s.status === 'active' ? 'logout' : 'check','w-5 h-5')}</div>
+              <div class="flex-1">
+                <div class="font-bold ${s.status === 'active' ? 'text-slate-900' : 'text-emerald-900'}">${s.status === 'active' ? 'Deactivate account' : 'Activate account'}</div>
+                <div class="text-xs ${s.status === 'active' ? 'text-slate-600' : 'text-emerald-700'}">${s.status === 'active' ? 'Hide from active class lists and stop billing — ledger is preserved' : 'Restore to active class lists and resume billing'}</div>
               </div>
             </div>
           </button>
@@ -6283,7 +6294,7 @@ function view_adm_staff() {
   });
 
   const renderRow = (t) => `
-    <tr class="cursor-pointer hover:bg-slate-50" onclick="viewStaff('${t.id}')">
+    <tr class="cursor-pointer hover:bg-slate-50" onclick="openStaffProfile('${t.id}')">
       <td>
         <div class="flex items-center gap-3">
           ${avatar(t.name, 'sm')}
@@ -6309,7 +6320,7 @@ function view_adm_staff() {
               : `<button class="btn btn-secondary text-xs !py-1" onclick="suspendStaffModal('${t.id}')">${icon('pause_circle','w-3.5 h-3.5')} Suspend</button>`
           ) : '<span class="text-xs text-slate-500">Offboarded</span>'}
           ${t.status !== 'terminated' ? `<button class="btn btn-secondary text-xs !py-1 text-rose-600 border-rose-200 hover:bg-rose-50" onclick="terminateStaffModal('${t.id}')">${icon('logout','w-3.5 h-3.5')} Offboard</button>` : ''}
-          <button class="btn btn-ghost !p-1.5" onclick="viewStaff('${t.id}')">${icon('arrow_left','w-4 h-4 rotate-180 text-slate-500')}</button>
+          <button class="btn btn-ghost !p-1.5" onclick="openStaffProfile('${t.id}')">${icon('arrow_left','w-4 h-4 rotate-180 text-slate-500')}</button>
         </div>
       </td>
     </tr>
@@ -6757,6 +6768,7 @@ function viewStaff(id, activeTab) {
     body: header + tabBar + `<div class="min-h-40">${bodyContent}</div>`,
     footer: `
       <button class="btn btn-secondary" onclick="document.getElementById('modalBackdrop')?.click()">Close</button>
+      <button class="btn btn-primary" onclick="openStaffProfile('${id}')">${icon('user','w-4 h-4')} Full Profile</button>
       ${!isTerminated ? `
         ${isSuspended
           ? `<button class="btn btn-secondary" onclick="document.getElementById('modalBackdrop')?.click(); setTimeout(()=>reinstateStaffModal('${id}'),50)">${icon('check_circle','w-4 h-4')} Reinstate</button>`
@@ -7713,6 +7725,13 @@ function view_adm_attendance() {
   const dateFrom = APP.params.dateFrom || date;
   const dateTo = APP.params.dateTo || date;
 
+  // Past the cutoff, anyone still unmarked is locked in as absent before this
+  // page reports a single number — otherwise the dashboard shows a roster as
+  // "incomplete" that the sweep has already closed.
+  if (date === today() && typeof attMaybeAutoSweep === 'function') attMaybeAutoSweep();
+
+  if (attView === 'alerts' && typeof attAlertsViewHtml === 'function') return attAlertsViewHtml(date);
+
   if (attView === 'class') {
     const classId = APP.params.classId || (classes.length ? classes[0].id : '');
     const cls = DB.find('classes', classId);
@@ -7757,7 +7776,7 @@ function view_adm_attendance() {
               return `<tr><td>
                 <div class="flex items-center gap-2">${avatar(s.name,'sm')}<span class="font-medium">${s.name}</span></div>
               </td><td>${r ? statusBadge(r.status) : '<span class="text-slate-500 text-sm">Not marked</span>'}</td>
-              <td class="text-sm text-slate-500">${r ? (r.markedAt || '—') : '—'}</td></tr>`;
+              <td class="text-sm text-slate-500">${r && r.markedAt ? (typeof att12h === 'function' ? att12h(r.markedAt) : r.markedAt) + (r.auto ? ' <span class="text-xs text-slate-400">(auto)</span>' : '') : '—'}</td></tr>`;
             }).join('')}
           </tbody>
         </table>
@@ -7796,10 +7815,13 @@ function view_adm_attendance() {
       </div>
     </div>
 
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+    ${typeof attScheduleBarHtml === 'function' ? attScheduleBarHtml(date) : ''}
+
+    <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
       ${statCard({ label: 'Present Today', value: totalPresent, icon: 'check', color: 'brand', trend: { direction: attendanceRate >= 80 ? 'up' : 'down', label: `${attendanceRate}% rate` } })}
       ${statCard({ label: 'Late Today', value: totalLate, icon: 'bell', color: 'gold' })}
       ${statCard({ label: 'Absent Today', value: totalAbsent, icon: 'x', color: 'rose' })}
+      ${statCard({ label: 'Pending', value: typeof attPendingCount === 'function' ? attPendingCount(date) : 0, icon: 'clock', color: 'gold' })}
       ${statCard({ label: 'Total Students', value: totalStudents, icon: 'students', color: 'blue' })}
     </div>
 
@@ -7809,21 +7831,29 @@ function view_adm_attendance() {
         <span class="text-xs text-slate-500">Click a class for detailed view</span>
       </div>
       <table class="tbl">
-        <th scope="col"ead><tr><th scope="col">Class</th><th scope="col" class="text-center">Total</th><th scope="col" class="text-center text-emerald-700">Present</th><th scope="col" class="text-center text-amber-600">Late</th><th scope="col" class="text-center text-rose-600">Absent</th><th scope="col" class="text-center">Rate</th><th scope="col"></th></tr></thead>
+        <thead><tr><th scope="col">Class</th><th scope="col">Teacher</th><th scope="col" class="text-center">Total</th><th scope="col" class="text-center text-emerald-700">Present</th><th scope="col" class="text-center text-amber-600">Late</th><th scope="col" class="text-center text-rose-600">Absent</th><th scope="col" class="text-center">Pending</th><th scope="col" class="text-center">Rate</th><th scope="col"></th></tr></thead>
         <tbody>
           ${classes.map(cls => {
             const classStudents = COMPUTE.studentsByClass(cls.id);
             const classRecs = dateRecs.filter(r => classStudents.find(s => s.id === r.studentId));
             const present = classRecs.filter(r => r.status === 'present').length;
             const late = classRecs.filter(r => r.status === 'late').length;
-            const absent = classStudents.length - present - late;
+            // Absent is what was actually recorded absent; anyone with no record
+            // at all is pending, not absent. Folding the two together hid every
+            // unmarked roster behind an absence figure that looked deliberate.
+            const absent = classRecs.filter(r => r.status === 'absent').length;
+            const pending = classStudents.length - classRecs.length;
+            const autoCount = classRecs.filter(r => r.auto).length;
+            const teacher = DB.find('teachers', cls.teacherId);
             const rate = classStudents.length > 0 ? Math.round(((present + late) / classStudents.length) * 100) : 0;
             return `<tr class="cursor-pointer hover:bg-slate-50" onclick="APP.params.attView='class'; APP.params.classId='${cls.id}'; APP.render()">
               <td><strong class="text-sm">${cls.name}</strong></td>
+              <td class="text-sm text-slate-600">${teacher ? teacher.name : '—'}</td>
               <td class="text-center">${classStudents.length}</td>
               <td class="text-center font-semibold text-emerald-700">${present}</td>
               <td class="text-center font-semibold text-amber-600">${late}</td>
-              <td class="text-center font-semibold text-rose-600">${absent}</td>
+              <td class="text-center font-semibold text-rose-600">${absent}${autoCount ? `<span class="text-xs font-normal text-slate-400"> (${autoCount} auto)</span>` : ''}</td>
+              <td class="text-center font-semibold ${pending ? 'text-slate-700' : 'text-slate-300'}">${pending}</td>
               <td class="text-center">
                 <div class="flex items-center gap-2 justify-center">
                   <div class="progress" style="width:80px"><div class="progress-bar" style="width:${rate}%"></div></div>
@@ -9868,6 +9898,7 @@ function view_adm_settings() {
       { key: 'branding',     label: 'Branding' },
       { key: 'billing',      label: 'Billing & Plan' },
       { key: 'academic',     label: 'Academic' },
+      { key: 'attendance',   label: 'Time & Attendance' },
       { key: 'appraisal',    label: 'Appraisal' },
       { key: 'budget',       label: 'Budget Categories' },
       { key: 'lists',        label: 'Lists & Options' },
@@ -9881,6 +9912,7 @@ function view_adm_settings() {
     <div class="pt-4">
       ${tab === 'billing' ? (typeof renderBillingSettings === 'function' ? renderBillingSettings() : '') :
         tab === 'academic' ? renderAcademicStructure() :
+        tab === 'attendance' ? (typeof renderTimeAttendanceSettings === 'function' ? renderTimeAttendanceSettings() : '') :
         tab === 'appraisal' ? renderAppraisalSettings() :
         tab === 'budget' ? renderBudgetCategoriesSettings() :
         tab === 'lists'  ? renderCustomListsSettings() :
@@ -10097,7 +10129,7 @@ function renderAISettings() {
                 <div class="font-semibold text-sm">${stu.name}</div>
                 <div class="text-xs text-amber-700">${reasons.join(' · ')}</div>
               </div>
-              <button class="btn btn-ghost !p-1.5" onclick="viewStudent('${stu.id}')">${icon('arrow_left','w-4 h-4 rotate-180')}</button>
+              <button class="btn btn-ghost !p-1.5" onclick="openStudentProfile('${stu.id}')">${icon('arrow_left','w-4 h-4 rotate-180')}</button>
             </div>`;
           }).join('')}</div>`;
         })()}
@@ -11871,8 +11903,8 @@ function acceptApplication(appId) {
   let newInvoice = null;
   if (fs) {
     const stuActs2 = DB.query('studentActivities', sa => sa.studentId === newStudent.id && sa.term === fs.term);
-    const actLines2 = stuActs2.map(sa => { const a = DB.find('activities', sa.activityId); return a ? { name: a.icon + ' ' + a.name, amount: a.price } : null; }).filter(Boolean);
-    const extraLines = (fs.extraItems || []).filter(i => i.name && i.amount > 0).map(i => ({ name: i.name, amount: i.amount }));
+    const actLines2 = stuActs2.map(sa => { const a = DB.find('activities', sa.activityId); return a ? { name: a.icon + ' ' + a.name, amount: a.price, head: 'activity' } : null; }).filter(Boolean);
+    const extraLines = (fs.extraItems || []).filter(i => i.name && i.amount > 0).map(i => ({ name: i.name, amount: i.amount, head: 'extra:' + _dpNorm(i.name) }));
     const total = fs.tuition + fs.books + fs.uniform + fs.pta + extraLines.reduce((s, l) => s + l.amount, 0) + actLines2.reduce((s, l) => s + l.amount, 0);
     newInvoice = {
       id: uid('inv'),
@@ -11880,10 +11912,10 @@ function acceptApplication(appId) {
       studentId: newStudent.id,
       term: fs.term,
       lineItems: [
-        { name: 'Tuition Fee', amount: fs.tuition },
-        { name: 'Books & Materials', amount: fs.books },
-        { name: 'Uniform', amount: fs.uniform },
-        { name: 'PTA Levy', amount: fs.pta },
+        { name: 'Tuition Fee', amount: fs.tuition, head: 'tuition' },
+        { name: 'Books & Materials', amount: fs.books, head: 'books' },
+        { name: 'Uniform', amount: fs.uniform, head: 'uniform' },
+        { name: 'PTA Levy', amount: fs.pta, head: 'pta' },
         ...extraLines,
         ...actLines2
       ],

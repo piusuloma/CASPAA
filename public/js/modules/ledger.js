@@ -144,11 +144,13 @@ function renderStudentWallet(studentId, schoolId) {
       <button class="btn btn-secondary text-xs" onclick="ledgerAddDiscount('${studentId}')">${icon('plus','w-4 h-4')} Add Discount</button>
       <button class="btn btn-secondary text-xs" onclick="openingBalanceModal('${studentId}')">${icon('fees','w-4 h-4')} Opening Balance</button>
       <button class="btn btn-secondary text-xs" onclick="adm_walletEntry('${studentId}','credit')">+ Credit</button>
-      <button class="btn btn-secondary text-xs" onclick="adm_walletEntry('${studentId}','debit')">− Debit</button>
-      <button class="btn btn-secondary text-xs ${s.status === 'active' ? 'text-rose-600' : 'text-emerald-700'}" onclick="toggleStudentAccount('${studentId}')">
-        ${s.status === 'active' ? 'Deactivate Account' : 'Activate Account'}
-      </button>
     </div>` : '';
+  // Removed from this row on purpose:
+  //   - Debit            an arbitrary charge with no reason code is the same
+  //                      revenue-leakage hole as an arbitrary discount. Real
+  //                      charges belong on the bill, where the audit panel is.
+  //   Deactivate Account a lifecycle action, not a money action - it now lives
+  //                      in the profile header's "..." (studentLifecycleModal).
 
   return `
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
@@ -312,10 +314,21 @@ function printStudentStatement(studentId, schoolId) {
    current-term invoice (stakeholder point 7: "Can bills be editable?").
    Discounts are handled by the existing applyDiscountModal.
 --------------------------------------------------------------------------- */
+/* Opens the bill editor straight at the concessions panel. This used to call
+   applyDiscountModal(), whose discount list was hardcoded - no policy, no
+   contra-revenue account, no reason code, no approval limit. That is exactly
+   the arbitrary concession the policy engine exists to stop, so the shortcut
+   now goes through the same audited path as Edit Bill. */
 function ledgerAddDiscount(studentId) {
   const inv = COMPUTE.studentInvoice(studentId) || DB.query('invoices', i => i.studentId === studentId).slice(-1)[0];
-  if (!inv) { toast('No invoice to discount — edit the bill first', 'warn'); return; }
-  if (typeof applyDiscountModal === 'function') applyDiscountModal(inv.id);
+  if (!inv) { toast('No invoice to discount - edit the bill first', 'warn'); return; }
+  editBillModal(inv.id);
+  // The modal paints synchronously; hand focus to the policy selector so the
+  // button lands the reader where they meant to go.
+  setTimeout(() => {
+    const sel = document.getElementById('conPolicySel');
+    if (sel) { sel.focus(); sel.scrollIntoView({ block: 'center' }); }
+  }, 80);
 }
 
 function ledgerEditBill(studentId) {
