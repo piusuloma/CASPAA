@@ -251,8 +251,7 @@ function view_tch_dashboard() {
   const day = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
   const todaySchedule = DB.query('timetable', tt => tt.teacherId === t.id && tt.day === day).sort((a,b) => a.period - b.period);
   const subjects = DB.get('subjects');
-  const _ttCfg = DB.settings().timetableConfig || {};
-  const _periodTimes = _ttCfg.periodTimes || {1:'08:00-08:40',2:'08:40-09:20',3:'09:20-10:00',4:'10:00-10:40',5:'11:00-11:40',6:'11:40-12:20',7:'13:00-13:40',8:'13:40-14:20'};
+  const _periodTimes = typeof bellLegacy === 'function' ? bellLegacy().periodTimes : {};
 
   return `
     <div class="space-y-5">
@@ -2509,26 +2508,21 @@ function renderTeacherWeekView() {
   const subjects = DB.get('subjects');
   const days = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
   const periods = [1,2,3,4,5,6,7,8];
-  const ttConfig = DB.settings().timetableConfig || {};
-  const periodTimes = ttConfig.periodTimes || {1:'08:00-08:40',2:'08:40-09:20',3:'09:20-10:00',4:'10:00-10:40',5:'11:00-11:40',6:'11:40-12:20',7:'13:00-13:40',8:'13:40-14:20'};
-  const break1After = ttConfig.break1After || 4;
-  const break2After = ttConfig.break2After || 6;
-  const break1Label = ttConfig.break1Label || 'Short Break';
-  const break2Label = ttConfig.break2Label || 'Lunch Break';
+  const schedule = typeof bellRows === 'function' ? bellRows() : [];
   return `
     <div class="card overflow-hidden">
       <div class="overflow-x-auto">
         <table class="tbl">
           <th scope="col"ead><tr><th scope="col">Period</th>${days.map(d => '<th scope="col">' + d + '</th>').join('')}</tr></thead>
           <tbody>
-            ${periods.map(p => {
+            ${schedule.map(slot => {
+              if (slot.isBreak) return '<tr class="bg-amber-50"><td colspan="6" class="text-center text-xs text-amber-800 font-semibold py-1.5">' + slot.label + ' · ' + slot.start + '–' + slot.end + '</td></tr>';
+              const p = slot.period;
               const entries = days.map(d => tt.find(x => x.day === d && x.period === p));
               const rows = [];
-              if (p === break1After + 1) rows.push('<tr class="bg-amber-50"><td colspan="6" class="text-center text-xs text-amber-800 font-semibold py-1.5">' + break1Label + '</td></tr>');
-              else if (p === break2After + 1) rows.push('<tr class="bg-brand-50"><td colspan="6" class="text-center text-xs text-brand-800 font-semibold py-1.5">' + break2Label + '</td></tr>');
-              if (entries.every(e => !e)) return rows.join('');
+              if (entries.every(e => !e)) return '';
               rows.push('<tr>'
-                + '<td><strong>P' + p + '</strong><br><span class="text-xs text-slate-500">' + (periodTimes[p] || '') + '</span></td>'
+                + '<td class="whitespace-nowrap"><strong>P' + p + '</strong><br><span class="text-xs text-slate-500 font-mono">' + slot.start + '-' + slot.end + '</span></td>'
                 + entries.map(e => {
                     if (!e) return '<td class="text-slate-300">—</td>';
                     const sub = subjects.find(s => s.id === e.subjectId);
@@ -2550,8 +2544,7 @@ function renderTeacherDayView() {
   const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
   const todays = DB.query('timetable', x => x.teacherId === t.id && x.day === dayName).sort((a, b) => a.period - b.period);
   const subjects = DB.get('subjects');
-  const _ttCfgD = DB.settings().timetableConfig || {};
-  const _periodTimesD = _ttCfgD.periodTimes || {1:'08:00-08:40',2:'08:40-09:20',3:'09:20-10:00',4:'10:00-10:40',5:'11:00-11:40',6:'11:40-12:20',7:'13:00-13:40',8:'13:40-14:20'};
+  const _periodTimesD = typeof bellLegacy === 'function' ? bellLegacy().periodTimes : {};
   if (todays.length === 0) {
     return emptyState({ title: 'No classes today', body: dayName + ' is free for you. Use the time for grading or lesson prep.', icon: 'calendar' });
   }

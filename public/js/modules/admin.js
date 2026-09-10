@@ -2591,6 +2591,13 @@ function schoolOnboardingSteps() {
       cta: 'Invite staff', action: 'onbScrollToInvite()'
     },
     {
+      key: 'bells', icon: 'clock',
+      title: 'Set your daily periods & breaks',
+      desc: 'Describe your school day — how many periods, how long, and when the breaks fall. Timetables and attendance both build on this.',
+      done: !!((DB.settings().timetableConfig || {}).slots || (DB.settings().timetableConfig || {}).periodTimes),
+      cta: 'Set up the day', action: "APP.go('adm_academic', { academicTab: 'timetable' }); setTimeout(ttTimeConfigModal, 250)"
+    },
+    {
       key: 'fees', icon: 'fees',
       title: 'Create your fee structure',
       desc: 'Define tuition and other charges per class so invoices can be generated.',
@@ -7269,12 +7276,8 @@ function view_adm_timetable() {
   const teachers = DB.query('teachers', t => t.schoolId === currentSchoolId());
   const days = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
   const periods = [1,2,3,4,5,6,7,8];
-  const ttConfig = DB.settings().timetableConfig || {};
-  const periodTimes = ttConfig.periodTimes || {1:'08:00-08:40',2:'08:40-09:20',3:'09:20-10:00',4:'10:00-10:40',5:'11:00-11:40',6:'11:40-12:20',7:'13:00-13:40',8:'13:40-14:20'};
-  const break1After = ttConfig.break1After || 4;
-  const break2After = ttConfig.break2After || 6;
-  const break1Label = ttConfig.break1Label || 'Short Break (10:40–11:00)';
-  const break2Label = ttConfig.break2Label || 'Lunch (12:20–13:00)';
+  // The day's shape comes from the school's bell schedule, not a fixed 1..8.
+  const schedule = typeof bellRows === 'function' ? bellRows() : [];
 
   return `
     ${pageHeader({
@@ -7303,18 +7306,15 @@ function view_adm_timetable() {
             <tr><th scope="col">Period</th>${days.map(d => `<th scope="col">${d}</th>`).join('')}</tr>
           </thead>
           <tbody>
-            ${periods.map(p => {
-              const periodEntries = days.map(d => tt.find(t => t.day === d && t.period === p));
-              const timeLabel = periodTimes[p] || `P${p}`;
-              const rows = [];
-              // Insert break row before this period if configured
-              if (p === break1After + 1) {
-                rows.push(`<tr class="bg-amber-50"><td colspan="${days.length + 1}" class="text-center text-xs text-amber-800 font-semibold py-1.5">${icon('sun','w-3.5 h-3.5 inline mr-1')} ${break1Label}</td></tr>`);
-              } else if (p === break2After + 1) {
-                rows.push(`<tr class="bg-brand-50"><td colspan="${days.length + 1}" class="text-center text-xs text-brand-800 font-semibold py-1.5">${icon('food','w-3.5 h-3.5 inline mr-1')} ${break2Label}</td></tr>`);
+            ${schedule.map(slot => {
+              if (slot.isBreak) {
+                return `<tr class="bg-amber-50"><td colspan="${days.length + 1}" class="text-center text-xs text-amber-800 font-semibold py-1.5">${slot.label} · ${slot.start}–${slot.end}</td></tr>`;
               }
+              const p = slot.period;
+              const periodEntries = days.map(d => tt.find(t => t.day === d && t.period === p));
+              const rows = [];
               rows.push(`<tr>
-                <td><strong class="text-slate-900">P${p}</strong><br><span class="text-xs text-slate-500">${timeLabel}</span></td>
+                <td class="whitespace-nowrap"><strong class="text-slate-900">P${p}</strong><br><span class="text-xs text-slate-500 font-mono">${slot.start}-${slot.end}</span></td>
                 ${days.map((d, i) => {
                   const e = periodEntries[i];
                   if (!e) {

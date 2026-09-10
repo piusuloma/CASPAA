@@ -2022,12 +2022,7 @@ function view_par_timetable() {
   const teachers = DB.get('teachers');
   const days = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
   const periods = [1,2,3,4,5,6,7,8];
-  const ttConfig = DB.settings().timetableConfig || {};
-  const periodTimes = ttConfig.periodTimes || {1:'08:00-08:40',2:'08:40-09:20',3:'09:20-10:00',4:'10:00-10:40',5:'11:00-11:40',6:'11:40-12:20',7:'13:00-13:40',8:'13:40-14:20'};
-  const break1After = ttConfig.break1After || 4;
-  const break2After = ttConfig.break2After || 6;
-  const break1Label = ttConfig.break1Label || 'Short Break';
-  const break2Label = ttConfig.break2Label || 'Lunch Break';
+  const schedule = typeof bellRows === 'function' ? bellRows() : [];
 
   return `
     ${pageHeader({ title: 'Class Timetable', subtitle: `Weekly schedule for ${child ? child.name : 'your child'}` })}
@@ -2049,13 +2044,13 @@ function view_par_timetable() {
           <table class="tbl">
             <th scope="col"ead><tr><th scope="col">Period</th>${days.map(d => `<th scope="col">${d}</th>`).join('')}</tr></thead>
             <tbody>
-              ${periods.map(p => {
+              ${schedule.map(slot => {
+                if (slot.isBreak) return `<tr class="bg-amber-50"><td colspan="${days.length + 1}" class="text-center text-xs text-amber-800 font-semibold py-1.5">${slot.label} · ${slot.start}–${slot.end}</td></tr>`;
+                const p = slot.period;
                 const entries = days.map(d => tt.find(x => x.day === d && x.period === p));
                 const rows = [];
-                if (p === break1After + 1) rows.push(`<tr class="bg-amber-50"><td colspan="6" class="text-center text-xs text-amber-800 font-semibold py-1.5">${break1Label}</td></tr>`);
-                else if (p === break2After + 1) rows.push(`<tr class="bg-brand-50"><td colspan="6" class="text-center text-xs text-brand-800 font-semibold py-1.5">${break2Label}</td></tr>`);
                 rows.push(`<tr>
-                  <td><strong class="text-slate-900">P${p}</strong><br><span class="text-xs text-slate-500">${periodTimes[p] || ''}</span></td>
+                  <td class="whitespace-nowrap"><strong class="text-slate-900">P${p}</strong><br><span class="text-xs text-slate-500 font-mono">${slot.start}-${slot.end}</span></td>
                   ${entries.map(e => {
                     if (!e) return '<td class="text-center text-slate-300 text-sm">—</td>';
                     const sub = subjects.find(s => s.id === e.subjectId);
